@@ -1,0 +1,38 @@
+- name: Check whether "sources.list" are correct
+  command: grep 'deb http://raspbian.raspberrypi.org/raspbian/ stretch main contrib non-free rpi' /etc/apt/sources.list
+  register: CheckSources
+
+- name: Installing basic packages
+  apt: 
+    name: "{{ item }}"
+  with_items:
+    - vim
+    - sudo
+    - terminator
+  when: CheckSources == True
+
+- name: Check if "dhcpcd.service" is disabled
+  shell:
+    args: systemctl status 'dhcpcd.service' webserver
+  register: DhcpcdState
+
+- name: Output the State of the DhcpcdState.
+  debug: 
+    var: DhcpcdState
+
+- name: Disabling DHCPCD
+  shell:
+    args: sudo systemctl disable dhdpcd.service
+  when: DhcpcdState == True
+
+- name: Checking network connectivity
+  shell:
+    args: ping 9.9.9.9
+  register: NetworkConnectivity
+
+- name: Output the NetworkConnectivity.
+  debug: 
+    var: NetworkConnectivity
+
+###- name: Checking network configuration
+###    when: NetworkConnectivity == False

@@ -1,0 +1,56 @@
+- name: Installing basic packages
+    apt: 
+      name: vim
+      name: sudo
+
+- name: RouteryPi requirements - Disable wpa_supplicant - Install Docker - Add user "pi" to group "docker"
+  shell:
+    args: sudo systemctl mask wpa_supplicant.service && sudo mv /sbin/wpa_supplicant /sbin/no_wpa_supplicant && sudo pkill wpa_supplicant
+    args: curl -fsSL get.docker.com -o get-docker.sh && sh get-socker.sh
+    args: sudo usermod -aG docker pi
+  register: Requirements
+
+#REBOOT ONLY IF CHANGE WAS MADE => HOW ?
+#CHANGED True/False FOR PREVIOUS ACTION
+#Example: - debug:\n\tvar: register_var
+#"register_var": {
+#        "changed": true, [...]
+
+- name: Reboot after Docker install
+  when: Requirements == changed #when: Requirements.changed == true   Fonctionnel ?
+  shell:
+    args: sudo reboot
+
+#Utile ?
+- name: Testing Docker install
+  shell:
+    args: docker run --rm hello-world
+
+- name: Pull the IOT Wifi Docker Image
+  shell:
+    args: docker pull cjimti/iotwifi
+
+- name: Download the default configuration file
+  shell:
+    args: wget https://raw.githubusercontent.com/cjimti/iotwifi/master/cfg/wificfg.json
+
+#MODIFY FILE => HOW ?
+  #lineinfile
+  #blockinfile
+  #shell: echo -e "" > file
+- name: Modify wificfg.json
+  lineinfile:
+    path: wificfg.json
+    regexp: '^ssid'
+    line: '\"ssid\"\: \"APHomeAndCo\"\,'
+  lineinfile:
+    path: wificfg.json
+    regexp: '^wpa\_passphrase'
+    line: '\"wpa\_passphrase\"\:\"StrongAndRememberablePassword\"\,'
+
+- name: Launching RouteryPi Docker
+  shell:
+    args: docker run --rm --privileged --net host -v $(pwd)/wificfg.json:/cfg/wificfg.json cjimti/iotwifi --restart=unless-stopped
+#Other Option :
+#args: docker run --rm --privileged --net host -v $(pwd)/wificfg.json:/cfg/wificfg.json -v <HOST_PATH>/wpa_supplicant.conf:<CONTAINER_PATH>/wpa_supplicant.conf cjimti/iotwifi
+#Where <CONTAINER_PATH> is the path to wpa_supplicant.conf specified in wificfg.json.
