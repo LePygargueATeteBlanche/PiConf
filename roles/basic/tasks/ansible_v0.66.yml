@@ -1,0 +1,98 @@
+###################Fonctionnel à priori (path does not exist - à tester sur Rasp)
+- name: Removing content from file /boot/PiBakery/everyboot.sh
+  lineinfile:
+    dest: /boot/PiBakery/everyboot.sh
+    regexp: '^.*'
+    line: ''
+###################
+###################Fonctionnel
+- name: Update - Upgrade - Basic packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+- name: Install packages
+  apt:  
+    name: "{{ item }}"
+  with_items:
+    - vim
+    - sudo
+    - dpkg
+###################
+###################Fonctionnel (n'installe pas si déjà présent, installe si absent)
+- name: Check Docker install
+  shell: "dpkg -s docker-ce"
+  ignore_errors: yes
+  register: CheckDocker
+  failed_when: "'est pas installé' in CheckDocker.stderr"
+
+# - name: Debug CheckDocker  
+#   debug:
+#     var: CheckDocker
+- name: Download Docker Installation Script
+  when: CheckDocker is failed
+  get_url:
+    url: "https://get.docker.com"
+    dest: "/etc/ansible/get-docker.sh"
+    checksum: "md5:55180262c5bccda5e48a9b53c4e3207b" #tu penses que ça sera toujours le même checksum ?
+  register: DockerInstallScript
+
+- name: Debug DockerInstallScript
+  debug:
+    var: DockerInstallScript
+
+- name: Launching Docker Install Script
+  script: "get-docker.sh"
+    chdir: "/etc/ansible/"
+  when: CheckDocker is failed and DockerInstallScript is succeeded
+  register: DockerInstalled
+
+- name: Reboot after Docker install
+  shell: reboot
+  when: CheckDocker is failed and DockerInstalled is succeeded
+ #reboot:
+   #msg: Reboot after Docker install
+   #test_command: whoami && docker run --rm hello-world
+###################Reprise après le reboot ?
+###################Fonctionnel
+- name: Disable wpa_supplicant
+  service:
+    name: wpa_supplicant
+    state: stopped
+###################
+###################Fonctionnel à priori (vérifier sur Rasp)
+- name: User Pi in group Docker
+  user:
+    name: pi
+    groups: docker
+    append: yes
+###################
+###################A tester
+- name: IOT Wifi Docker
+  docker_container:
+    name: iotwifi
+    image: cjimti/iotwifi
+    pull: True
+- name: Download the default configuration file
+  get_url:
+    url: "wget https://raw.githubusercontent.com/cjimti/iotwifi/master/cfg/wificfg.json"
+    dest: "~"
+    owner: pi
+    checksum: "md5:EB742C1359F508D97E7C7E9CF9ABA080" #pareil
+- name: Modify wificfg.json
+  lineinfile:
+    path: wificfg.json
+    regexp: "{{ item.rgxp }}"
+    line: "{{ item.lne }}"
+  loop:
+    - { rgxp: '^ssid', lne: '\"ssid\"\: \"APHomeAndCo\"\,' }
+    - { rgxp: '^wpa\_passphrase', lne: '\"wpa\_passphrase\"\:\"StrongAndRememberablePassword\"\,' }
+
+###################
+###################A tester - Voir pour remplacer shell par un module
+- name: Launching RouteryPi Docker
+  shell:
+    args: docker run --rm --privileged --net host -v $(pwd)/wificfg.json:/cfg/wificfg.json cjimti/iotwifi --restart=unless-stopped
+Other Option :
+args: docker run --rm --privileged --net host -v $(pwd)/wificfg.json:/cfg/wificfg.json -v <HOST_PATH>/wpa_supplicant.conf:<CONTAINER_PATH>/wpa_supplicant.conf cjimti/iotwifi
+Where <CONTAINER_PATH> is the path to wpa_supplicant.conf specified in wificfg.json.
+###################
